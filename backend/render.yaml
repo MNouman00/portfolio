@@ -1,0 +1,13 @@
+services:
+  - type: web
+    name: nouman-portfolio-api
+    runtime: python
+    plan: free
+    region: oregon
+    buildCommand: "./build.sh"
+    startCommand: "gunicorn portfolio_project.wsgi --bind 0.0.0.0:$PORT --log-file -"
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.12.0
+      - key: DEBUG
+        value: "False"
