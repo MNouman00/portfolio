@@ -10,8 +10,16 @@ from .serializers import ProjectSerializer, LoginSerializer
 
 
 def _is_authorized(request) -> bool:
+    """Verify Bearer token and check the subject matches ADMIN_USERNAME."""
     auth = request.headers.get("Authorization", "")
-    return auth.startswith("Bearer ")
+    if not auth.startswith("Bearer "):
+        return False
+    token = auth[7:]  # strip "Bearer "
+    try:
+        refresh = RefreshToken(token)
+        return refresh.get("sub") == os.getenv("ADMIN_USERNAME")
+    except Exception:
+        return False
 
 
 # ---------- Auth ----------
@@ -33,12 +41,26 @@ def login_view(request):
             status=status.HTTP_401_UNAUTHORIZED,
         )
 
+    # Build a refresh token with the claims SimpleJWT expects
     refresh = RefreshToken()
     refresh["sub"] = username
+    refresh["username"] = username
+    refresh["user_id"] = 1
+    refresh["token_type"] = "refresh"
+
     access = refresh.access_token
     access["sub"] = username
+    access["username"] = username
+    access["user_id"] = 1
+    access["token_type"] = "access"
 
-    return Response({"access_token": str(access), "token_type": "bearer"})
+    return Response(
+        {
+            "access_token": str(access),
+            "refresh_token": str(refresh),
+            "token_type": "bearer",
+        }
+    )
 
 
 # ---------- Projects: list + create ----------
