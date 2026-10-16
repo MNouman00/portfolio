@@ -8,16 +8,16 @@ from rest_framework_simplejwt.tokens import RefreshToken
 from .models import Project
 from .serializers import ProjectSerializer, LoginSerializer
 
-
 def _is_authorized(request) -> bool:
-    """Verify Bearer token and check the subject matches ADMIN_USERNAME."""
+    """Validate token without needing a Django user."""
     auth = request.headers.get("Authorization", "")
     if not auth.startswith("Bearer "):
         return False
-    token = auth[7:]  # strip "Bearer "
+    token = auth[7:]
     try:
-        refresh = RefreshToken(token)
-        return refresh.get("sub") == os.getenv("ADMIN_USERNAME")
+        from rest_framework_simplejwt.tokens import AccessToken
+        access = AccessToken(token)  # validates signature + expiry
+        return access.get("sub") == os.getenv("ADMIN_USERNAME")
     except Exception:
         return False
 
@@ -45,13 +45,13 @@ def login_view(request):
     refresh = RefreshToken()
     refresh["sub"] = username
     refresh["username"] = username
-    refresh["user_id"] = 1
+   
     refresh["token_type"] = "refresh"
 
     access = refresh.access_token
     access["sub"] = username
     access["username"] = username
-    access["user_id"] = 1
+    
     access["token_type"] = "access"
 
     return Response(
