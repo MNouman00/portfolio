@@ -1,23 +1,36 @@
 import os
+from django.core import signing
 from rest_framework import status
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
-from rest_framework_simplejwt.tokens import RefreshToken
 
 from .models import Project
 from .serializers import ProjectSerializer, LoginSerializer
 
+
+TOKEN_SALT = "portfolio.admin.token"
+TOKEN_MAX_AGE = 60 * 60 * 8  # 8 hours
+
+
+def _make_token(username: str) -> str:
+    """Create a signed token (tamper-proof) for the admin user."""
+    return signing.dumps({"sub": username}, salt=TOKEN_SALT)
+
+
 def _is_authorized(request) -> bool:
-    """Validate token without needing a Django user."""
+    """Verify the signed Bearer token from the Authorization header."""
     auth = request.headers.get("Authorization", "")
     if not auth.startswith("Bearer "):
         return False
-    token = auth[7:]
+    token = auth[7:].strip()
     try:
-        from rest_framework_simplejwt.tokens import AccessToken
-        access = AccessToken(token)  # validates signature + expiry
-        return access.get("sub") == os.getenv("ADMIN_USERNAME")
+        data = signing.loads(token, salt=TOKEN_SALT, max_age=TOKEN_MAX_AGE)
+        return data.get("sub") == os.getenv("ADMIN_USERNAME")
+    except signing.BadSignature:
+        return False
+    except signing.SignatureExpired:
+        return False
     except Exception:
         return False
 
@@ -41,26 +54,8 @@ def login_view(request):
             status=status.HTTP_401_UNAUTHORIZED,
         )
 
-    # Build a refresh token with the claims SimpleJWT expects
-    refresh = RefreshToken()
-    refresh["sub"] = username
-    refresh["username"] = username
-   
-    refresh["token_type"] = "refresh"
-
-    access = refresh.access_token
-    access["sub"] = username
-    access["username"] = username
-    
-    access["token_type"] = "access"
-
-    return Response(
-        {
-            "access_token": str(access),
-            "refresh_token": str(refresh),
-            "token_type": "bearer",
-        }
-    )
+    token = _make_token(username)
+    return Response({"access_token": token, "token_type": "bearer"})
 
 
 # ---------- Projects: list + create ----------
